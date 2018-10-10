@@ -27,6 +27,14 @@ class Wrapper(RSDataProcessor):
         self._factors = None
         self.factors = [processor]
 
+    @abstractmethod
+    def _fit(self, X, y):
+        pass
+
+    @abstractmethod
+    def _transform(self, X):
+        return X
+
     def fit_transform(self, data):
         if self.b_fit:
             return RSDataProcessor.fit_transform(self, data)
@@ -105,24 +113,26 @@ class WrpDataProcessor(Wrapper):
             name = name % processor.__class__.__name__
         Wrapper.__init__(self, features2process, processor, name)
 
-    def _process(self, data, features, label):
+    def _fit(self, X, y):
+        self.processor.fit(X, y)
+
+    def _transform(self, X):
         """
         处理后的列会被重命名
         :param data:
         :return:
         """
-        data = data.copy()
-        X, y = data[features], data[label]
-        X_ = self.processor.fit_transform(X, y)
+        X_ = self.processor.transform(X)
+        features = X.columns
         if X.shape == X_.shape:
-            data[features] = X_
+            X = X_
         else:
             colsname = ['%s_%d' % (self.name, x) for x in range(X_.shape[1])]
-            data.drop(columns=features, inplace=True)
-            X = data.__class__(pd.DataFrame(X_, columns=colsname, index=data.index))
-            data = pd.concat([X, data], axis=1)
+            X.drop(columns=features, inplace=True)
+            X_ = X.__class__(pd.DataFrame(X_, columns=colsname, index=data.index))
+            X = pd.concat([X, X_], axis=1)
             # !concat以index相等为条件来进行join
-        return data
+        return X
 
 
 class WrpClassifier(Wrapper):
@@ -143,13 +153,20 @@ class WrpClassifier(Wrapper):
         self.plots = None
         self.label = ''
 
-    def _process(self, data, features, label):
+    def _fit(self, X, y):
+        pass
+
+    def _transform(self, X):
+        return X
+
+    def transform(self, data):
         """
         warning： 此函数不同于通用DataProcess的同名函数
         :param data:  可以为[X y]，或者(trainset, testset)
         :return:  ClfResult
         """
-        self.label = label
+        features = self.actual_f2p
+        label = self.actual_label
         if isinstance(data, tuple):
             self.train_set, self.test_set = data[0], data[1]
         else:
@@ -158,7 +175,7 @@ class WrpClassifier(Wrapper):
                                            self.train_set[label], self.test_set[label]
         X_train, X_test = X_train.values, X_test.values
         self._run(X_train, y_train, X_test, y_test)
-        self.show_result()
+        # self.show_result()
         return data
 
     def _run(self, X_train, y_train, X_test, y_test):
@@ -223,7 +240,15 @@ class WrpFunction(Wrapper):
         name = 'WrpFunc-%s' % name
         Wrapper.__init__(self, features2process, func, name)
 
-    def _process(self, data, features, label):
+    def _fit(self, X, y):
+        pass
+
+    def _transform(self, X):
+        return X
+
+    def transform(self, data):
+        features = self.actual_f2p
+        label = self.actual_label
         param_names = self.processor.__code__.co_varnames
         params = []
         for param in param_names:
@@ -263,7 +288,15 @@ class WrpSearchCV(Wrapper):
         name = 'WrpSCV-%s' % name
         Wrapper.__init__(self, features2process, validator, name)
 
-    def _process(self, data, features, label):
+    def _fit(self, X, y):
+        pass
+
+    def _transform(self, X):
+        return X
+
+    def transform(self, data):
+        features = self.actual_f2p
+        label = self.actual_label
         self.processor.fit(data[features].values, data[label].values)
         self.msg('\n%s' % RSTable(pd.DataFrame(data=self.processor.best_params_, index=['value'])), 'best params')
         self.msg('%.3f' % self.processor.best_score_, 'best score')
@@ -282,6 +315,12 @@ class WrpCluster(Wrapper):
             name = cluster.__class__.__name__
         name = 'WrpClu-%s' % name
         Wrapper.__init__(self, features2process, cluster, name)
+
+    def _fit(self, X, y):
+        pass
+
+    def _transform(self, X):
+        return X
 
     def _process(self, data, features, label):
         return data
@@ -311,7 +350,13 @@ class WrpCrossValidator(WrpClassifier, pd.DataFrame):
         else:
             self.name = ''
 
-    def _process(self, data, features, label):
+    def _fit(self, X, y):
+        pass
+
+    def _transform(self, X):
+        return X
+
+    def transform(self, data):
         """
         _process will not run until self.estimator is not None
         :param data:
@@ -319,6 +364,8 @@ class WrpCrossValidator(WrpClassifier, pd.DataFrame):
         :param label:
         :return:
         """
+        features = self.actual_f2p
+        label = self.actual_label
         X, y = data[features].values, data[label].values
         train_scores, test_scores, roc_aucs = [], [], []
         good_samples, bad_samples = np.array([]), np.array([])
@@ -373,9 +420,12 @@ class WrpUnknown(Wrapper):
     def __init__(self, features2process, obj):
         Wrapper.__init__(self, features2process, obj, name='WrpUnknown-%s' % obj.__class__.__name__)
 
-    def _process(self, data, features, label):
+    def _fit(self, X, y):
+        pass
+
+    def _transform(self, X):
         self.warning('No operation occurred.')
-        return data
+        return X
 
 
 def wrap(features2process, processor, *args, **kwargs):

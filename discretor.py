@@ -83,7 +83,7 @@ class DsctChi2(Discretor):
             if R_index >= len(bin_li):
                 break
 
-    def _transform(self, x):
+    def _transform(self, X):
         res = []
         for e in x:
             index = self.get_Discretization_index(self.final_bin, e)
@@ -132,18 +132,21 @@ class DsctMonospace(Discretor):
         """
         Discretor.__init__(self, features2process)
         self.bin_amount = bin_amount
+        self.Xmin = None
+        self.bs = None
 
-    def _process(self, data, features, label):
+    def _fit(self, X, y):
         """
         :param X: pandas.DataFrame([feature1, feature2, ...])
         """
-        X, y = data[features], data[label]
         bs = self.bin_amount
-        bs = (X.max() - X.min()) / bs
+        self.Xmin = X.min()
+        bs = (X.max() - self.Xmin) / bs
         bs[bs == 0] = 1  # 避免除数为0
-        X = ((X - X.min()) / bs).round()
-        data[features] = X
-        return data
+        self.bs = bs
+
+    def _transform(self, X):
+        return ((X - self.Xmin) / self.bs).round()
 
 
 class DsctInfomationEntropy(Discretor):

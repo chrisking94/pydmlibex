@@ -61,6 +61,8 @@ class RSDataProcessor(RSObject):
         self.messages = {}
         self._factors = None
         self.factors = []
+        self.actual_f2p = None  # features actually need to process
+        self.actual_label = None
 
     def turn(self, state):
         """
@@ -123,8 +125,39 @@ class RSDataProcessor(RSObject):
             msg = features.__str__()
         self.msg(msg, title)
 
-    def _process(self, data, features, label):
-        self.error('Not implemented!')
+    @abstractmethod
+    def _fit(self, X, y):
+        raise NotImplementedError()
+
+    def fit(self, data):
+        # 更新实际要处理的特征名
+        features = data.columns[:-1]
+        features = features[self.features2process]
+        if isinstance(features, str):
+            features = RSData.Index([features])
+        if isinstance(self.features2process, str):
+            self._msg_features(features, data.columns, self.features2process)
+        elif isinstance(self.features2process, tuple):
+            self._msg_features(features, data.columns, self.features2process[0])
+        self.actual_f2p = features
+        # 更新label实际列名
+        self.actual_label = data.columns[-1]
+        X = data[self.actual_f2p]
+        y = data[self.actual_label]
+        self._fit(X, y)
+
+    @abstractmethod
+    def _transform(self, X):
+        raise NotImplementedError()
+
+    def transform(self, data):
+        if self.actual_f2p is None:
+            self.error("invoke fit() firstly")
+        X = data[self.actual_f2p]
+        data = data.drop(columns=X.columns)
+        X = self._transform(X)
+        data = pd.concat([X, data], axis=1)
+        return data
 
     def fit_transform(self, data):
         """
@@ -149,33 +182,28 @@ class RSDataProcessor(RSObject):
                 # 筛选处理特征：
                 # 如果self.features2process为None则设置成data.columns
                 # 否则为features2process∩data.columns
-                features = data.columns[:-1]
-                features = features[self.features2process]
-                if isinstance(features, str):
-                    features = RSData.Index([features])
-                if isinstance(self.features2process, str):
-                    self._msg_features(features, data.columns, self.features2process)
-                elif isinstance(self.features2process, tuple):
-                    self._msg_features(features, data.columns, self.features2process[0])
-                label = data.columns[-1]
-                if features.__len__() == 0:
-                    self.warning('No feature to process.')
-                else:
-                    self.factors.extend(data.shape)
-                    self.time_estimation_thread.estimator = self.cost_estimator
-                    try:
-                        self.cost_estimator.start_timer()
-                        data = self._process(data, features, label)
+                try:
+                    self.cost_estimator.start_timer()
+                    self.fit(data)
+                    features = self.actual_f2p
+                    if features is None:
+                        self.error('invoke fit() firstly!')
+                    if features.__len__() == 0:
+                        self.warning('No feature to process.')
+                    else:
+                        self.factors.extend(data.shape)
+                        self.time_estimation_thread.estimator = self.cost_estimator
+                        data = self.transform(data)
                         self.cost_estimator.memorize_experience()
-                    except Exception as e:
-                        raise e
-                    finally:
-                        self.cost_estimator.abandon_experience()
-                        self.time_estimation_thread.estimator = None
-                        RSDataProcessor.label.visible = False
-                        self.progressbar.width = 0
+                except Exception as e:
+                    raise e
+                finally:
+                    self.cost_estimator.abandon_experience()
+                    self.time_estimation_thread.estimator = None
+                    RSDataProcessor.label.visible = False
+                    self.progressbar.width = 0
             else:
-                data = self._process(data, None, None)
+                raise Exception("unsupported data type [%s]." % str(type(data)))
             RSDataProcessor.label.visible = False
             self.progressbar.width = 0
             self.msg_time_cost()

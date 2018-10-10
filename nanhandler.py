@@ -6,6 +6,14 @@ class NanHandler(RSDataProcessor):
     def __init__(self, features2process, name=''):
         RSDataProcessor.__init__(self, features2process, name, 'yellow', 'black')
 
+    @abstractmethod
+    def _fit(self, X, y):
+        pass
+
+    @abstractmethod
+    def _transform(self, X):
+        pass
+
 
 class NHToSpecial(NanHandler):
     def __init__(self, features2process, special=0):
@@ -16,9 +24,9 @@ class NHToSpecial(NanHandler):
         """
         NanHandler.__init__(self, features2process)
         self.special = special
+        self.actualSpecial = None
 
-    def _process(self, data, features, label):
-        X = data[features]
+    def _fit(self, X, y):
         if isinstance(self.special, str):
             if self.special == 'mean':
                 value = X.mean()
@@ -30,9 +38,11 @@ class NHToSpecial(NanHandler):
                 value = self.special
         else:
             value = self.special
-        data[features] = X.fillna(value)
-        self.msg(data.shape.__str__(), 'data.shape')
-        return data
+        self.actualSpecial = value
+
+    def _transform(self, X):
+        X = X.fillna(self.actualSpecial)
+        return X
 
 
 class NHDropColumns(NanHandler):
@@ -44,14 +54,16 @@ class NHDropColumns(NanHandler):
         """
         NanHandler.__init__(self, features2process)
         self.null_rate_threshold = null_rate_threshold
+        self.drop_cols = None
 
-    def _process(self, data, features, label):
-        X = data[features]
+    def _fit(self, X, y):
         nullrates = X.isnull().sum() / X.shape[0]
-        dropcols = X.columns[nullrates > self.null_rate_threshold]
-        data = data.drop(columns=dropcols)
-        self.msg(dropcols.__str__(), 'columns discarded')
-        return data
+        self.drop_cols = X.columns[nullrates > self.null_rate_threshold]
+
+    def _transform(self, X):
+        X = X.drop(columns=self.drop_cols)
+        self.msg(self.drop_cols.__str__(), 'columns discarded')
+        return X
 
 
 class NHDropRows(NanHandler):
@@ -71,19 +83,25 @@ class NHDropRows(NanHandler):
             feature_weights = np.array(feature_weights)
             feature_weights /= feature_weights.sum()
         self.feature_weights = feature_weights
+        self.b_refitted = False
 
-    def _process(self, data, features, label):
+    def _fit(self, X, y):
+        self.b_refitted = True
+
+    def transform(self, data):
         """
         丢弃features2process子集缺失率超过threshold的行
         """
-        sample_count = data.shape[0]
-        if self.feature_weights is None:
-            miss_rate = data[features].isnull().sum(axis=1) / float(features.shape[0])
-        else:
-            miss_rate = (data[features].isnull() * self.feature_weights).sum(axis=1)
-        keep = miss_rate <= self.miss_rate_threshold
-        data = data.loc[keep, :]
-        self.msg('%d ==> %d' % (sample_count, data.shape[0]), 'sample count')
+        if self.b_refitted:
+            features = self.actual_f2p
+            sample_count = data.shape[0]
+            if self.feature_weights is None:
+                miss_rate = data[features].isnull().sum(axis=1) / float(features.shape[0])
+            else:
+                miss_rate = (data[features].isnull() * self.feature_weights).sum(axis=1)
+            keep = miss_rate <= self.miss_rate_threshold
+            data = data.loc[keep, :]
+            self.msg('%d ==> %d' % (sample_count, data.shape[0]), 'sample count')
         return data
 
 
@@ -95,9 +113,13 @@ class NHOneHot(NanHandler, FEOneHot):
         """
         FEOneHot.__init__(self, features2process)
         NanHandler.__init__(self, features2process)
+        self.nan_cols = None
 
-    def _process(self, data, features, label):
-        nan_columns = features[data[features].isnull().sum() > 0]
-        return  FEOneHot._process(self, data, nan_columns, label)
+    def _fit(self, X, y):
+        self.nan_cols = self.actual_f2p[X.isnull().sum() > 0]
+        FEOneHot._fit(self, X[self.nan_cols], y)
+
+    def _transform(self, X):
+        return FEOneHot._transform(self, X, y)
 
 

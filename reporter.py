@@ -1,4 +1,4 @@
-from .dataprocessor import RSDataProcessor
+from .dataprocessor import *
 from .base import np
 
 
@@ -6,10 +6,21 @@ class Reporter(RSDataProcessor):
     def __init__(self, features2process, name='Reporter', forecolor='blue'):
         RSDataProcessor.__init__(self, features2process, name, forecolor, 'black', 'default')
 
+    @abstractmethod
+    def _fit(self, X, y):
+        pass
+
+    def _transform(self, X):
+        return X
+
 
 class DataReporter(Reporter):
     def __init__(self, features2process, name='DataReporter'):
         Reporter.__init__(self, features2process, name, 'blue')
+
+    @abstractmethod
+    def _fit(self, X, y):
+        pass
 
 
 class DRBrief(DataReporter):
@@ -27,16 +38,16 @@ class DRBrief(DataReporter):
         self.args = args
         self.data_shape = (0, 0)
 
-    def _process(self, data, features, label):
-        X, y = data[features], data[label]
+    def _fit(self, X, y):
+        features = self.actual_f2p
         breportall = self.args.__len__() == 0
-        self.data_shape = data.shape
+        self.data_shape = X.shape
         if breportall or 'shape' in self.args:
-            self.msg(data.shape.__str__(), 'data.shape')
+            self.msg(X.shape.__str__(), 'data.shape')
         if breportall or 'columns' in self.args:
             b_contais_nan = False
             for x in features:
-                null_count = data[x].isnull().sum()
+                null_count = X[x].isnull().sum()
                 if null_count > 0:
                     self.msg('%s -> %d' % (x, null_count), 'NaN count')
                     b_contais_nan = True
@@ -45,11 +56,11 @@ class DRBrief(DataReporter):
         if 'unique-items' in self.args:
             self.msg('↓', 'unique-items')
             for col in features:
-                items, cnts = np.unique(data[col], return_counts=True)
+                items, cnts = np.unique(X[col], return_counts=True)
                 if items.shape[0] > 20:
                     self.msg('%s -> %d type of items.' % (col, items.shape[0]))
                 else:
                     self.msg('%s -> %s' % (col, dict(zip(items,cnts)).__str__()))
-        return data
+
 
 

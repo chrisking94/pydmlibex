@@ -1,7 +1,6 @@
 from .outlierhandler import *
 from .factorencoder import *
 from .discretor import *
-from .featureclassifier import *
 from .featurecombiner import *
 from .featureselector import *
 from .misc import *

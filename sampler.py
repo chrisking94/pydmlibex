@@ -4,14 +4,31 @@ from .dataprocessor import *
 class Sampler(RSDataProcessor):
     def __init__(self, features2process, name=''):
         RSDataProcessor.__init__(self, features2process, name, 'blue', 'yellow', 'highlight')
+        self.b_refitted = False
 
     def _sample(self, data, features, label):
         self.error('Not implemented!')
 
-    def _process(self, data, features, label):
-        spcount0 = data.shape[0]
-        data = self._sample(data, features, label)
-        self.msg('%d ==> %d' % (spcount0, data.shape[0]), 'sample quantity')
+    def _fit(self, X, y):
+        self.b_refitted = True
+
+    def _transform(self, X):
+        pass
+
+    def transform(self, data):
+        """
+        只有调用fit之后再调用transform会使transform产生效果
+        一次transform之后这种有效性将被重置
+        :param data:
+        :return:
+        """
+        if self.b_refitted:
+            self.b_refitted = False
+            features = self.actual_f2p
+            label = self.actual_label
+            spcount0 = data.shape[0]
+            data = self._sample(data, features, label)
+            self.msg('%d ==> %d' % (spcount0, data.shape[0]), 'sample quantity')
         return data
 
 

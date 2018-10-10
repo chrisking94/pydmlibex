@@ -11,6 +11,14 @@ class FeatureCombiner(RSDataProcessor):
         """
         RSDataProcessor.__init__(self, features2process, name, 'cyan', 'blue', 'highlight')
 
+    @abstractmethod
+    def _fit(self, X):
+        raise NotImplementedError()
+
+    @abstractmethod
+    def _transform(self, X):
+        raise NotImplementedError()
+
 
 class FCbArithmetical(FeatureCombiner):
     def __init__(self, features2process, operations, name=''):
@@ -30,6 +38,7 @@ class FCbArithmetical(FeatureCombiner):
         self.operations = operations
         self.staticOperations = []
         self.dynamicOperations = []
+        self.parsedOperations = []
         for operation in self.operations:
             s = operation.replace('\$', '')
             if s.find('$') == -1:  #static operation
@@ -110,21 +119,22 @@ class FCbArithmetical(FeatureCombiner):
     def _opr_to_readable(self, operation):
         return  operation .replace('[', '').replace(']', '')
 
-    def _process(self, data, features, label):
-        data = data.copy()
-        feat_count0 = data.shape[1] - 1
-        data, target = data[data.columns[:-1]], data[label]
+    def _fit(self, X, y):
         # 静态表达式
-        operations = [x for x in self.staticOperations if self._is_valid(x, features)]
+        operations = [x for x in self.staticOperations if self._is_valid(x, self.actual_f2p)]
         # 动态表达式
         for dyopr in self.dynamicOperations:
-            operations.extend(self._parse_dynamic(dyopr, features))
-        for i, cmd in enumerate(operations):
+            operations.extend(self._parse_dynamic(dyopr, self.actual_f2p))
+        self.parsedOperations = operations
+
+    def _transform(self, X):
+        data = X
+        feat_count0 = data.shape[1]
+        for i, cmd in enumerate(self.parsedOperations):
             exec(self._parse_static(cmd))
             self.msg(self._opr_to_readable(cmd), 'done')
-        data = pd.concat([data, target], axis=1)
-        nadded = data.shape[1]-feat_count0-1
-        nmodified = operations.__len__() - nadded
+        nadded = data.shape[1]-feat_count0
+        nmodified = self.parsedOperations.__len__() - nadded
         self.msg('feature count\t%d ==> %d, %d added, %d replaced.' %
                  (feat_count0, data.shape[1]-1, nadded, nmodified))
         return data

@@ -21,6 +21,15 @@ class ProcessorSequence(RSDataProcessor, RSList):
         self.b_contains_continue = False
         self.report_table = None
 
+    def fit(self, data):
+        for procr in self:
+            data = procr.fit(data)
+
+    def transform(self, data):
+        for procr in self:
+            data = procr.transform(data)
+        return data
+
     def fit_transform(self, data=None):
         self.start_timer()
         self.report_line = []
@@ -303,7 +312,10 @@ class TCCheckPoint(TesterController):
         self.infolist = None
         self.copy_count = 0
 
-    def fit_transform(self, data):
+    def _fit(self, X, y):
+        pass
+
+    def transform(self, data):
         self.start_timer()
         msg = self.color_str('⚪check-point', 0, 6, 8)
         if data is not None:

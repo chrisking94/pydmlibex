@@ -22,12 +22,12 @@ class FeatureSelector(RSDataProcessor):
         RSDataProcessor.__init__(self, features2process, name, 'pink', 'white', 'highlight')
         self.feature_count = feature_count
         self.scores = None
+        self.valid_features = None
         self.plot = plot
 
-    def _process(self, data, features, label):
-        feat_count0 = data.shape[1] - 1
-        sdata, starget = data[features], data[label]
-        scores = self.score(sdata, starget)
+    def _fit(self, X, y):
+        features = X.columns
+        scores = self.score(X, y)
         scores = pd.Series(scores, index=features)
         # normalization
         scores /= scores.sum()
@@ -35,6 +35,8 @@ class FeatureSelector(RSDataProcessor):
         self.scores = RSSeries(self.scores)
         if scores.isnull().sum() != 0:
             self.error('scores contains null.')
+        scores = self.scores
+        features = self.actual_f2p
         if self.feature_count < 1:
             feature_count = int(self.feature_count * features.__len__())
         else:
@@ -43,9 +45,18 @@ class FeatureSelector(RSDataProcessor):
             self.bar(top=feature_count)
         elif self.plot == 'pie':
             self.pie(top=feature_count)
-        fdata = data.drop(columns=scores.nsmallest(features.__len__()-feature_count).index)
-        self.msg('%d ==> %d' % (feat_count0, fdata.shape[1] - 1), 'feature count')
-        return fdata
+        self.valid_features = scores.nlargest(feature_count).index
+
+    def _transform(self, X):
+        pass
+
+    def transform(self, data):
+        X = data[self.valid_features]
+        if self.actual_label in data.columns:
+            data = pd.concat([X, data[self.actual_label]], axis=1)
+        else:
+            data = X
+        return data
 
     def score(self, data, target):
         self.error('Not implemented!')
@@ -107,7 +118,7 @@ class FSmRMR(FeatureSelector):
 
 
 class FSManual(FeatureSelector):
-    def __init__(self, features2process, b_except=False):
+    def __init__(self, features2process):
         """
         select feature manually
         :param features2process:
@@ -115,14 +126,9 @@ class FSManual(FeatureSelector):
         :param name:
         """
         FeatureSelector.__init__(self, features2process)
-        self.b_except = b_except
 
-    def _process(self, data, features, label):
-        if self.b_except:
-            features = list(set(data.columns[:-1]) - set(features))
-        self.msg('%d features preserved.' % features.__len__())
-        ret = pd.concat([data[features], data[label]], axis=1)
-        return ret
+    def _fit(self, X, y):
+        self.valid_features = self.actual_f2p
 
 
 class FSL1Regularization(FeatureSelector):
